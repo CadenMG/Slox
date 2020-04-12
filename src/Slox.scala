@@ -15,7 +15,6 @@ object Slox {
 
   var hadError = false
 
-
   @throws[IOException]
   def main(args: Array[String]): Unit = {
     if (args.length > 1) {
