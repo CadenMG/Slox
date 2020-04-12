@@ -25,6 +25,9 @@ class Interpreter extends Expr.Visitor[Any] {
         return left.asInstanceOf[Double] - right.asInstanceOf[Double]
       case TokenType.SLASH =>
         checkNumberOperands(expr.operator, left, right)
+        if (right.asInstanceOf[Double] == 0.0) {
+          throw new RuntimeError(expr.operator, "Division by zero.")
+        }
         return left.asInstanceOf[Double] / right.asInstanceOf[Double]
       case TokenType.STAR =>
         checkNumberOperands(expr.operator, left, right)
@@ -32,10 +35,11 @@ class Interpreter extends Expr.Visitor[Any] {
       case TokenType.PLUS =>
         if (left.isInstanceOf[Double] && right.isInstanceOf[Double])
           return left.asInstanceOf[Double] + right.asInstanceOf[Double]
-        if (left.isInstanceOf[String] && right.isInstanceOf[String])
-          return left.asInstanceOf[String] + right.asInstanceOf[String]
+        if ( (left.isInstanceOf[String] || right.isInstanceOf[String])
+          && (left != null && right != null))
+          return left.toString + right.toString
         throw new RuntimeError(expr.operator,
-        "Operands must be two numbers or two strings.")
+        "Operands must be two numbers or at least one string and not nil.")
       case TokenType.GREATER =>
         checkNumberOperands(expr.operator, left, right)
         return left.asInstanceOf[Double] > right.asInstanceOf[Double]
