@@ -1,8 +1,8 @@
 import java.util
 
 /**
- *
- * @param tokens
+ * Parses tokens into expression objects; which are the languages AST.
+ * @param tokens  list of token objects
  */
 class Parser(tokens: util.List[Token]) {
   private class ParseError extends RuntimeException {}

@@ -1,3 +1,6 @@
+/**
+ * Utility class for printing ASTs.
+ */
 class ASTPrinter extends Expr.Visitor[String] {
 
   def print(expr: Expr): String = {

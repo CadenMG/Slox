@@ -13,7 +13,9 @@ import java.io.IOException
  */
 object Slox {
 
+  private val interpreter = new Interpreter()
   var hadError = false
+  var hadRuntimeError = false
 
   @throws[IOException]
   def main(args: Array[String]): Unit = {
@@ -31,6 +33,7 @@ object Slox {
     run(new String(bytes, Charset.defaultCharset))
 
     if (hadError) System.exit(65)
+    if (hadRuntimeError) System.exit(70)
   }
 
   @throws[IOException]
@@ -54,7 +57,7 @@ object Slox {
     val parser = new Parser(tokens)
     val expression = parser.parse()
     if (hadError) return
-    println(new ASTPrinter().print(expression))
+    this.interpreter.interpret(expression)
   }
 
   def error(line: Int, message: String): Unit = {
@@ -73,6 +76,11 @@ object Slox {
     else {
       report(token.line, " at '" + token.lexeme + "'", message)
     }
+  }
+
+  def runtimeError(error: RuntimeError): Unit = {
+    println(error.getMessage + "\n[line " + error.token.line + "]")
+    this.hadRuntimeError = true
   }
 
 }

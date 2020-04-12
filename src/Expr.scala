@@ -1,5 +1,5 @@
 /**
- *
+ * An abstract representation of code in Slox.
  */
 object Expr {
 
