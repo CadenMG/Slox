@@ -1,4 +1,4 @@
-class ASTPrinter extends Expr .Visitor[String] {
+class ASTPrinter extends Expr.Visitor[String] {
 
   def print(expr: Expr): String = {
     expr.accept(this)
@@ -19,7 +19,7 @@ class ASTPrinter extends Expr .Visitor[String] {
   }
 
   override def visitLiteralExpr(expr: Expr.Literal): String = {
-    if (expr.value == null) "nil"
+    if (expr.value == null) return "nil"
     expr.value.toString
   }
 

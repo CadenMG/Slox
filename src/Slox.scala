@@ -51,9 +51,10 @@ object Slox {
   private def run(source: String): Unit = {
     val scanner = new Scanner(source)
     val tokens = scanner.scanTokens()
-
-    // For now, just print the tokens.
-    tokens.forEach(println)
+    val parser = new Parser(tokens)
+    val expression = parser.parse()
+    if (hadError) return
+    println(new ASTPrinter().print(expression))
   }
 
   def error(line: Int, message: String): Unit = {
@@ -63,6 +64,15 @@ object Slox {
   private def report(line: Int, where: String, message: String): Unit = {
     println("[line " + line + "] Error" + where + ": " + message)
     hadError = true
+  }
+
+  def error(token: Token, message: String): Unit = {
+    if (token.tType == TokenType.EOF) {
+      report(token.line, " at end", message)
+    }
+    else {
+      report(token.line, " at '" + token.lexeme + "'", message)
+    }
   }
 
 }
