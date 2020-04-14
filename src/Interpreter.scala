@@ -1,19 +1,29 @@
+import java.util
+
 /**
  * Interprets expression objects which represent the language's AST.
  */
-class Interpreter extends Expr.Visitor[Any] {
+class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
 
-  def interpret(expr: Expr): Unit = {
+  private var environment = new Environment()
+
+  def interpret(statements: util.ArrayList[Stmt]): Unit = {
     try {
-      val value = evaluate(expr)
-      println(stringify(value))
+      statements.forEach {
+        execute(_)
+      }
     }
     catch {
       case error: RuntimeError => Slox.runtimeError(error)
     }
   }
 
-  override def visitAssignExpr(expr: Expr.Assign): Any = ???
+  override def visitAssignExpr(expr: Expr.Assign): Any = {
+    val value = evaluate(expr.value)
+
+    this.environment.assign(expr.name, value)
+    value
+  }
 
   override def visitBinaryExpr(expr: Expr.Binary): Any = {
     val left = evaluate(expr.left)
@@ -95,10 +105,16 @@ class Interpreter extends Expr.Visitor[Any] {
     null
   }
 
-  override def visitVariableExpr(expr: Expr.Variable): Any = ???
+  override def visitVariableExpr(expr: Expr.Variable): Any = {
+    this.environment.get(expr.name)
+  }
 
   private def evaluate(expr: Expr): Any = {
     expr.accept(this)
+  }
+
+  private def execute(stmt: Stmt): Unit = {
+    stmt.accept(this)
   }
 
   private def isTruthy(any: Any): Boolean = {
@@ -132,4 +148,48 @@ class Interpreter extends Expr.Visitor[Any] {
     }
     any.toString
   }
+
+  private def executeBlock(stmts: util.ArrayList[Stmt], environment: Environment): Unit = {
+    val previous = this.environment
+
+    try {
+      this.environment = environment
+      stmts.forEach(execute(_))
+    }
+    finally {
+      this.environment = previous
+    }
+  }
+
+  override def visitBlockStmt(stmt: Stmt.Block): Unit = {
+    executeBlock(stmt.statements, new Environment(this.environment))
+  }
+
+  override def visitClassStmt(stmt: Stmt.Class): Unit = ???
+
+  override def visitExpressionStmt(stmt: Stmt.Expression): Unit = {
+    evaluate(stmt.expression)
+  }
+
+  override def visitFunctionStmt(stmt: Stmt.Function): Unit = ???
+
+  override def visitIfStmt(stmt: Stmt.If): Unit = ???
+
+  override def visitPrintStmt(stmt: Stmt.Print): Unit = {
+    val value = evaluate(stmt.expression)
+    println(stringify(value))
+  }
+
+  override def visitReturnStmt(stmt: Stmt.Return): Unit = ???
+
+  override def visitVarStmt(stmt: Stmt.Var): Unit = {
+    var value: Option[Any] = None
+    if (stmt.initializer != null)
+      value = Some(evaluate(stmt.initializer))
+    val equals = value.orNull
+
+    this.environment.define(stmt.name.lexeme, equals)
+  }
+
+  override def visitWhileStmt(stmt: Stmt.While): Unit = ???
 }

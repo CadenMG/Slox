@@ -8,7 +8,19 @@ class Parser(tokens: util.List[Token]) {
   private class ParseError extends RuntimeException {}
 
   /*
-  expression     → equality ;
+  program        → declaration* EOF ;
+  declaration    → varDecl
+                 | statement ;
+  varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+  statement      → exprStmt
+                 | printStmt
+                 | block ;
+  block          → "{" declaration* "}" ;
+  exprStmt       → expression ";" ;
+  printStmt      → "print" expression ";" ;
+  expression     → assignment ;
+  assignment     → IDENTIFIER "=" assignment
+                 | equality ;
   equality       → comparison ( ( "!=" | "==" ) comparison )* ;
   comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
   addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
@@ -16,22 +28,95 @@ class Parser(tokens: util.List[Token]) {
   unary          → ( "!" | "-" ) unary
                  | primary ;
   primary        → NUMBER | STRING | "false" | "true" | "nil"
-                 | "(" expression ")" ;
+                 | "(" expression ")" | IDENTIFIER ;
    */
 
   private var current = 0
 
-  def parse(): Expr = {
+  def parse(): util.ArrayList[Stmt] = {
+    val statements = new util.ArrayList[Stmt]()
+    while (!isAtEnd) {
+      statements.add(declaration())
+    }
+    statements
+  }
+
+  private def declaration(): Stmt = {
     try {
-      expression()
+      if (`match`(TokenType.VAR)) return varDeclaration()
+      statement()
     }
     catch {
-      case _: ParseError => null
+      case error: ParseError =>
+        synchronize()
+        null
     }
   }
 
+  private def varDeclaration(): Stmt = {
+    val name = consume(TokenType.IDENTIFIER, "Expect variable name.")
+
+    var initializer: Option[Expr] = None
+    if (`match`(TokenType.EQUAL)) {
+      initializer = Some(expression())
+    }
+
+    val value = initializer.orNull
+
+    consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.")
+    new Stmt.Var(name, value)
+  }
+
+  private def statement(): Stmt = {
+    if (`match`(TokenType.PRINT)) return printStatement()
+    if (`match`(TokenType.LEFT_BRACE)) return new Stmt.Block(block())
+
+    expressionStatement()
+  }
+
+  private def printStatement(): Stmt = {
+    val value = expression()
+    consume(TokenType.SEMICOLON, "Expect ';' after value.")
+    new Stmt.Print(value)
+  }
+
+  private def expressionStatement(): Stmt = {
+    val expr = expression()
+    consume(TokenType.SEMICOLON, "Expect ';' after expression.")
+    new Stmt.Expression(expr)
+  }
+
+  private def block(): util.ArrayList[Stmt] = {
+    val statements = new util.ArrayList[Stmt]()
+
+    while (!check(TokenType.RIGHT_BRACE) && !isAtEnd) {
+      statements.add(declaration())
+    }
+
+    consume(TokenType.RIGHT_BRACE, "Expect '}' after block")
+    statements
+  }
+
   private def expression(): Expr = {
-    equality()
+    assignment()
+  }
+
+  private def assignment(): Expr = {
+    val expr = equality()
+
+    if (`match`(TokenType.EQUAL)) {
+      val equals = previous()
+      val value = assignment()
+
+      if (expr.isInstanceOf[Expr.Variable]) {
+        val name = expr.asInstanceOf[Expr.Variable].name
+        return new Expr.Assign(name, value)
+      }
+
+      error(equals, "Invalid assignment target.")
+    }
+
+    expr
   }
 
   private def equality(): Expr = {
@@ -107,6 +192,9 @@ class Parser(tokens: util.List[Token]) {
 
     if (`match`(TokenType.NUMBER, TokenType.STRING))
       return new Expr.Literal(previous().literal)
+
+    if (`match`(TokenType.IDENTIFIER))
+      return new Expr.Variable(previous())
 
     if (`match`(TokenType.LEFT_PAREN)) {
       val expr = expression()
