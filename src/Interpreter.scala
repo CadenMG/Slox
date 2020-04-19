@@ -83,7 +83,18 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     expr.value
   }
 
-  override def visitLogicalExpr(expr: Expr.Logical): Any = ???
+  override def visitLogicalExpr(expr: Expr.Logical): Any = {
+    val left = evaluate(expr.left)
+
+    if (expr.operator.tType == TokenType.OR) {
+      if (isTruthy(left)) return left
+    }
+    else {
+      if (!isTruthy(left)) return left
+    }
+
+    evaluate(expr.right)
+  }
 
   override def visitSetExpr(expr: Expr.Set): Any = ???
 
@@ -173,7 +184,14 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
 
   override def visitFunctionStmt(stmt: Stmt.Function): Unit = ???
 
-  override def visitIfStmt(stmt: Stmt.If): Unit = ???
+  override def visitIfStmt(stmt: Stmt.If): Unit = {
+    if (isTruthy(evaluate(stmt.condition))) {
+      execute(stmt.thenBranch)
+    }
+    else if (stmt.elseBranch != null) {
+      execute(stmt.elseBranch)
+    }
+  }
 
   override def visitPrintStmt(stmt: Stmt.Print): Unit = {
     val value = evaluate(stmt.expression)
@@ -191,5 +209,9 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     this.environment.define(stmt.name.lexeme, equals)
   }
 
-  override def visitWhileStmt(stmt: Stmt.While): Unit = ???
+  override def visitWhileStmt(stmt: Stmt.While): Unit = {
+    while (isTruthy(evaluate(stmt.condition))) {
+      execute(stmt.body)
+    }
+  }
 }

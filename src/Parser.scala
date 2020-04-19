@@ -13,14 +13,24 @@ class Parser(tokens: util.List[Token]) {
                  | statement ;
   varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
   statement      → exprStmt
+                 | forStmt
+                 | ifStmt
                  | printStmt
+                 | whileStmt
                  | block ;
+  forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+                      expression? ";"
+                      expression? ")" statement ;
+  whileStmt      → "while" "(" expression ")" statement ;
+  ifStmt         → "if" "(" expression ")" statement ( "else" statement )? ;
   block          → "{" declaration* "}" ;
   exprStmt       → expression ";" ;
   printStmt      → "print" expression ";" ;
   expression     → assignment ;
   assignment     → IDENTIFIER "=" assignment
-                 | equality ;
+                 | logic_or ;
+  logic_or       → logic_and ( "or" logic_and )* ;
+  logic_and      → equality ( "and" equality )* ;
   equality       → comparison ( ( "!=" | "==" ) comparison )* ;
   comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
   addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
@@ -68,10 +78,79 @@ class Parser(tokens: util.List[Token]) {
   }
 
   private def statement(): Stmt = {
+    if (`match`(TokenType.FOR)) return forStatement()
+    if (`match`(TokenType.IF)) return ifStatement()
     if (`match`(TokenType.PRINT)) return printStatement()
+    if (`match`(TokenType.WHILE)) return whileStatement()
     if (`match`(TokenType.LEFT_BRACE)) return new Stmt.Block(block())
 
     expressionStatement()
+  }
+
+  private def forStatement(): Stmt = {
+    consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.")
+
+    var initializer: Option[Stmt] = None
+    if (`match`(TokenType.SEMICOLON)) {
+      initializer = None
+    }
+    else if (`match`(TokenType.VAR)) {
+      initializer = Some(varDeclaration())
+    }
+    else {
+      initializer = Some(expressionStatement())
+    }
+
+    var condition: Option[Expr] = None
+    if (!check(TokenType.SEMICOLON)) {
+      condition = Some(expression())
+    }
+    consume(TokenType.SEMICOLON, "Expect ';' after loop condition.")
+
+    var increment: Option[Expr] = None
+    if (!check(TokenType.RIGHT_PAREN)) {
+      increment = Some(expression())
+    }
+    consume(TokenType.RIGHT_PAREN, "Expect ')' after for clause.")
+    var body = statement()
+
+    if (increment.nonEmpty) {
+      body = new Stmt.Block(new util.ArrayList(util.Arrays.asList(body, new Stmt.Expression(increment.orNull))))
+    }
+
+    if (condition.isEmpty) {
+      condition = Some(new Expr.Literal(true))
+    }
+    body = new Stmt.While(condition.orNull, body)
+
+    if (initializer.nonEmpty) {
+      body = new Stmt.Block(new util.ArrayList(util.Arrays.asList(initializer.orNull, body)))
+    }
+
+    body
+  }
+
+  private def whileStatement(): Stmt = {
+    consume(TokenType.LEFT_PAREN, "Expect '(' after 'if'.")
+    val condition = expression()
+    consume(TokenType.RIGHT_PAREN, "Expect ')' after if condition.")
+    val body = statement()
+
+    new Stmt.While(condition, body)
+  }
+
+  private def ifStatement(): Stmt = {
+    consume(TokenType.LEFT_PAREN, "Expect '(' after 'if'.")
+    val condition = expression()
+    consume(TokenType.RIGHT_PAREN, "Expect ')' after if condition.")
+
+    val thenBranch = statement()
+    var elseBranch:Option[Stmt] = None
+    if (`match`(TokenType.ELSE)) {
+      elseBranch = Some(statement())
+    }
+
+    new Stmt.If(condition, thenBranch, elseBranch.orNull)
   }
 
   private def printStatement(): Stmt = {
@@ -102,7 +181,7 @@ class Parser(tokens: util.List[Token]) {
   }
 
   private def assignment(): Expr = {
-    val expr = equality()
+    val expr = or()
 
     if (`match`(TokenType.EQUAL)) {
       val equals = previous()
@@ -114,6 +193,30 @@ class Parser(tokens: util.List[Token]) {
       }
 
       error(equals, "Invalid assignment target.")
+    }
+
+    expr
+  }
+
+  private def or(): Expr = {
+    var expr = and()
+
+    while (`match`(TokenType.OR)) {
+      val operator = previous()
+      val right = and()
+      expr = new Expr.Logical(expr, operator, right)
+    }
+
+    expr
+  }
+
+  private def and(): Expr = {
+    var expr = equality()
+
+    while (`match`(TokenType.AND)) {
+      val operator = previous()
+      val right = equality()
+      expr = new Expr.Logical(expr, operator, right)
     }
 
     expr
