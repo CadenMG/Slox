@@ -9,15 +9,21 @@ class Parser(tokens: util.List[Token]) {
 
   /*
   program        → declaration* EOF ;
-  declaration    → varDecl
+  declaration    → funDecl
+                 | varDecl
                  | statement ;
   varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
   statement      → exprStmt
                  | forStmt
                  | ifStmt
                  | printStmt
+                 | returnStmt
                  | whileStmt
                  | block ;
+  returnStmt     → "return" expression? ";" ;
+  funDecl        → "fun" function ;
+  function       → IDENTIFIER "(" parameters? ")" block ;
+  parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
   forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
                       expression? ";"
                       expression? ")" statement ;
@@ -35,8 +41,9 @@ class Parser(tokens: util.List[Token]) {
   comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
   addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
   multiplication → unary ( ( "/" | "*" ) unary )* ;
-  unary          → ( "!" | "-" ) unary
-                 | primary ;
+  unary          → ( "!" | "-" ) unary | call ;
+  call           → primary ( "(" arguments? ")" )* ;
+  arguments      → expression ( "," expression )* ;
   primary        → NUMBER | STRING | "false" | "true" | "nil"
                  | "(" expression ")" | IDENTIFIER ;
    */
@@ -53,6 +60,7 @@ class Parser(tokens: util.List[Token]) {
 
   private def declaration(): Stmt = {
     try {
+      if (`match`(TokenType.FUN)) return function("function")
       if (`match`(TokenType.VAR)) return varDeclaration()
       statement()
     }
@@ -61,6 +69,22 @@ class Parser(tokens: util.List[Token]) {
         synchronize()
         null
     }
+  }
+
+  private def function(kind: String): Stmt.Function = {
+    val name = consume(TokenType.IDENTIFIER, "Expect " + kind + " name.")
+    consume(TokenType.LEFT_PAREN, "Expect '(' after " + kind + "name.")
+    val parameters = new util.ArrayList[Token]()
+    if (!check(TokenType.RIGHT_PAREN)) {
+      do {
+        parameters.add(consume(TokenType.IDENTIFIER, "Expect parameter name."))
+      } while (`match`(TokenType.COMMA))
+    }
+    consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.")
+
+    consume(TokenType.LEFT_BRACE, "Expect '{' before " + kind + " body.")
+    val body = block()
+    new Stmt.Function(name, parameters, body)
   }
 
   private def varDeclaration(): Stmt = {
@@ -81,10 +105,22 @@ class Parser(tokens: util.List[Token]) {
     if (`match`(TokenType.FOR)) return forStatement()
     if (`match`(TokenType.IF)) return ifStatement()
     if (`match`(TokenType.PRINT)) return printStatement()
+    if (`match`(TokenType.RETURN)) return returnStatement()
     if (`match`(TokenType.WHILE)) return whileStatement()
     if (`match`(TokenType.LEFT_BRACE)) return new Stmt.Block(block())
 
     expressionStatement()
+  }
+
+  private  def returnStatement(): Stmt = {
+    val keyword = previous()
+    var value: Option[Expr] = None
+    if (!check(TokenType.SEMICOLON)) {
+      value = Some(expression())
+    }
+
+    consume(TokenType.SEMICOLON, "Expect ';' after return value.")
+    new Stmt.Return(keyword, value.orNull)
   }
 
   private def forStatement(): Stmt = {
@@ -285,7 +321,41 @@ class Parser(tokens: util.List[Token]) {
       new Expr.Unary(operator, right)
     }
 
-    primary()
+    call()
+  }
+
+  private def call(): Expr = {
+    var expr = primary()
+    object AllDone extends Exception { }
+
+    try {
+      while (true) {
+        if (`match`(TokenType.LEFT_PAREN)) {
+          expr = finishCall(expr)
+        }
+        else {
+          throw AllDone
+        }
+      }
+    }
+    catch {
+      case _: Exception =>
+    }
+
+    expr
+  }
+
+  private def finishCall(callee: Expr): Expr = {
+    val arguments = new util.ArrayList[Expr]()
+    if (!check(TokenType.RIGHT_PAREN)) {
+      do {
+        arguments.add(expression())
+      } while (`match`(TokenType.COMMA))
+    }
+
+    val paren = consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.")
+
+    new Expr.Call(callee, paren, arguments)
   }
 
   private def primary(): Expr = {

@@ -5,7 +5,20 @@ import java.util
  */
 class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
 
-  private var environment = new Environment()
+  final var globals = new Environment()
+  private var environment = globals
+
+  this.globals.define("clock", new SloxCallable {
+    override def arity(): Int = 0
+
+    override def call(interpreter: Interpreter, arguments: util.ArrayList[Any]): Any = {
+      System.currentTimeMillis().asInstanceOf[Double] / 10000
+    }
+
+    override def toString: String = {
+      "<native fn>"
+    }
+  })
 
   def interpret(statements: util.ArrayList[Stmt]): Unit = {
     try {
@@ -71,7 +84,20 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     null
   }
 
-  override def visitCallExpr(expr: Expr.Call): Any = ???
+  override def visitCallExpr(expr: Expr.Call): Any = {
+    val callee = evaluate(expr.callee)
+
+    val arguments = new util.ArrayList[Any]
+    expr.arguments.forEach(arg => arguments.add(evaluate(arg)))
+
+    val function = callee.asInstanceOf[SloxCallable]
+    if (arguments.size() != function.arity()) {
+      throw new RuntimeError(expr.paren, "Expected " +
+        function.arity() + " arguments but got " +
+        arguments.size() + ".")
+    }
+    function.call(this, arguments)
+  }
 
   override def visitGetExpr(expr: Expr.Get): Any = ???
 
@@ -160,7 +186,7 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     any.toString
   }
 
-  private def executeBlock(stmts: util.ArrayList[Stmt], environment: Environment): Unit = {
+  def executeBlock(stmts: util.ArrayList[Stmt], environment: Environment): Unit = {
     val previous = this.environment
 
     try {
@@ -182,7 +208,10 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     evaluate(stmt.expression)
   }
 
-  override def visitFunctionStmt(stmt: Stmt.Function): Unit = ???
+  override def visitFunctionStmt(stmt: Stmt.Function): Unit = {
+    val function = new SloxFunction(stmt, environment)
+    environment.define(stmt.name.lexeme, function)
+  }
 
   override def visitIfStmt(stmt: Stmt.If): Unit = {
     if (isTruthy(evaluate(stmt.condition))) {
@@ -198,7 +227,12 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     println(stringify(value))
   }
 
-  override def visitReturnStmt(stmt: Stmt.Return): Unit = ???
+  override def visitReturnStmt(stmt: Stmt.Return): Unit = {
+    var value: Option[Any] = None
+    if (stmt.value != null) value = Some(evaluate(stmt.value))
+
+    throw new Return(value.orNull)
+  }
 
   override def visitVarStmt(stmt: Stmt.Var): Unit = {
     var value: Option[Any] = None

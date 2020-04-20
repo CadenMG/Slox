@@ -1,3 +1,5 @@
+import java.util
+
 /**
  * An abstract representation of code in Slox.
  */
@@ -43,7 +45,7 @@ object Expr {
 
   //< expr-binary
   //> expr-call
-  class Call(val callee: Expr, val paren: Token, val arguments: List[Expr]) extends Expr {
+  class Call(val callee: Expr, val paren: Token, val arguments: util.ArrayList[Expr]) extends Expr {
     override def accept[R](visitor: Expr.Visitor[R]): R = visitor.visitCallExpr(this)
   }
 

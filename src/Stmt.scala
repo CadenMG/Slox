@@ -42,7 +42,7 @@ object Stmt {
 
   //< stmt-expression
   //> stmt-function
-  class Function(val name: Token, val params: Nothing, val body: Nothing) extends Stmt {
+  class Function(val name: Token, val params: util.ArrayList[Token], val body: util.ArrayList[Stmt]) extends Stmt {
     override def accept[R](visitor: Stmt.Visitor[R]): R = visitor.visitFunctionStmt(this)
   }
 
