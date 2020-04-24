@@ -1,6 +1,6 @@
 import scala.collection.mutable
 
-class Environment(enclosing: Environment = null) {
+class Environment(var enclosing: Environment = null) {
   private final val values = new mutable.HashMap[String, Any]()
 
   def get(name: Token): Any = {
@@ -30,5 +30,22 @@ class Environment(enclosing: Environment = null) {
     }
 
     throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.")
+  }
+
+  def assignAt(distance: Int, name: Token, value: Any): Unit = {
+    ancestor(distance).values.put(name.lexeme, value)
+  }
+
+  def getAt(distance: Int, name: String): Any = {
+    ancestor(distance).values.get(name).orNull
+  }
+
+  def ancestor(distance: Int): Environment = {
+    var environment = this
+    for (_ <- 0 until distance) {
+      environment = environment.enclosing
+    }
+
+    environment
   }
 }

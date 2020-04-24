@@ -1,5 +1,7 @@
 import java.util
 
+import scala.collection.mutable
+
 /**
  * Interprets expression objects which represent the language's AST.
  */
@@ -7,6 +9,7 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
 
   final var globals = new Environment()
   private var environment = globals
+  private final val locals = new mutable.HashMap[Expr, Int]()
 
   this.globals.define("clock", new SloxCallable {
     override def arity(): Int = 0
@@ -34,7 +37,14 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
   override def visitAssignExpr(expr: Expr.Assign): Any = {
     val value = evaluate(expr.value)
 
-    this.environment.assign(expr.name, value)
+    val distance = this.locals.get(expr)
+    if (distance.nonEmpty) {
+      this.environment.assignAt(distance.get, expr.name, value)
+    }
+    else {
+      this.globals.assign(expr.name, value)
+    }
+
     value
   }
 
@@ -86,10 +96,8 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
 
   override def visitCallExpr(expr: Expr.Call): Any = {
     val callee = evaluate(expr.callee)
-
     val arguments = new util.ArrayList[Any]
     expr.arguments.forEach(arg => arguments.add(evaluate(arg)))
-
     val function = callee.asInstanceOf[SloxCallable]
     if (arguments.size() != function.arity()) {
       throw new RuntimeError(expr.paren, "Expected " +
@@ -143,7 +151,18 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
   }
 
   override def visitVariableExpr(expr: Expr.Variable): Any = {
-    this.environment.get(expr.name)
+    lookUpVariable(expr.name, expr)
+  }
+
+  private def lookUpVariable(name: Token, expr: Expr): Any = {
+    val distance = this.locals.get(expr)
+
+    if (distance.nonEmpty) {
+      environment.getAt(distance.get, name.lexeme)
+    }
+    else {
+      globals.get(name)
+    }
   }
 
   private def evaluate(expr: Expr): Any = {
@@ -236,8 +255,10 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
 
   override def visitVarStmt(stmt: Stmt.Var): Unit = {
     var value: Option[Any] = None
-    if (stmt.initializer != null)
-      value = Some(evaluate(stmt.initializer))
+    if (stmt.initializer != null) {
+      val t = evaluate(stmt.initializer)
+      value = Some(t)
+    }
     val equals = value.orNull
 
     this.environment.define(stmt.name.lexeme, equals)
@@ -247,5 +268,9 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     while (isTruthy(evaluate(stmt.condition))) {
       execute(stmt.body)
     }
+  }
+
+  def resolve(expr: Expr, depth: Int): Unit = {
+    this.locals.put(expr, depth)
   }
 }

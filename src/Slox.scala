@@ -57,6 +57,12 @@ object Slox {
     val parser = new Parser(tokens)
     val statements = parser.parse()
     if (hadError) return
+
+    val resolver = new Resolver(interpreter)
+    resolver.resolve(statements)
+
+    if (hadError) return
+
     this.interpreter.interpret(statements)
   }
 
