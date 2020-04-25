@@ -9,9 +9,11 @@ class Parser(tokens: util.List[Token]) {
 
   /*
   program        → declaration* EOF ;
-  declaration    → funDecl
+  declaration    → classDecl
+                 | funDecl
                  | varDecl
                  | statement ;
+  classDecl      → "class" IDENTIFIER "{" function* "}" ;
   varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
   statement      → exprStmt
                  | forStmt
@@ -33,8 +35,8 @@ class Parser(tokens: util.List[Token]) {
   exprStmt       → expression ";" ;
   printStmt      → "print" expression ";" ;
   expression     → assignment ;
-  assignment     → IDENTIFIER "=" assignment
-                 | logic_or ;
+  assignment     → ( call "." )? IDENTIFIER "=" assignment
+                 | logic_or;
   logic_or       → logic_and ( "or" logic_and )* ;
   logic_and      → equality ( "and" equality )* ;
   equality       → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -42,7 +44,7 @@ class Parser(tokens: util.List[Token]) {
   addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
   multiplication → unary ( ( "/" | "*" ) unary )* ;
   unary          → ( "!" | "-" ) unary | call ;
-  call           → primary ( "(" arguments? ")" )* ;
+  call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
   arguments      → expression ( "," expression )* ;
   primary        → NUMBER | STRING | "false" | "true" | "nil"
                  | "(" expression ")" | IDENTIFIER ;
@@ -60,6 +62,7 @@ class Parser(tokens: util.List[Token]) {
 
   private def declaration(): Stmt = {
     try {
+      if (`match`(TokenType.CLASS)) return classDeclaration()
       if (`match`(TokenType.FUN)) return function("function")
       if (`match`(TokenType.VAR)) return varDeclaration()
       statement()
@@ -69,6 +72,20 @@ class Parser(tokens: util.List[Token]) {
         synchronize()
         null
     }
+  }
+
+  private def classDeclaration(): Stmt = {
+    val name = consume(TokenType.IDENTIFIER, "Expect class name.")
+    consume(TokenType.LEFT_BRACE, "Expect '{' before class body.")
+
+    val methods = new util.ArrayList[Stmt.Function]()
+    while (!check(TokenType.RIGHT_BRACE) && !isAtEnd) {
+      methods.add(function("method"))
+    }
+
+    consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.")
+
+    new Stmt.Class(name, methods)
   }
 
   private def function(kind: String): Stmt.Function = {
@@ -227,6 +244,10 @@ class Parser(tokens: util.List[Token]) {
         val name = expr.asInstanceOf[Expr.Variable].name
         return new Expr.Assign(name, value)
       }
+      else if (expr.isInstanceOf[Expr.Get]) {
+        val get = expr.asInstanceOf[Expr.Get]
+        return new Expr.Set(get.`object`, get.name, value)
+      }
 
       error(equals, "Invalid assignment target.")
     }
@@ -333,6 +354,11 @@ class Parser(tokens: util.List[Token]) {
         if (`match`(TokenType.LEFT_PAREN)) {
           expr = finishCall(expr)
         }
+        else if (`match`(TokenType.DOT)) {
+          val name = consume(TokenType.IDENTIFIER,
+                      "Expect property name after '.'.")
+          expr = new Expr.Get(expr, name)
+        }
         else {
           throw AllDone
         }
@@ -365,6 +391,9 @@ class Parser(tokens: util.List[Token]) {
 
     if (`match`(TokenType.NUMBER, TokenType.STRING))
       return new Expr.Literal(previous().literal)
+
+    if (`match`(TokenType.THIS))
+      return new Expr.This(previous())
 
     if (`match`(TokenType.IDENTIFIER))
       return new Expr.Variable(previous())

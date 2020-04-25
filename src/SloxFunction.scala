@@ -1,6 +1,13 @@
 import java.util
 
-class SloxFunction(val declaration: Stmt.Function, val closure: Environment) extends SloxCallable {
+class SloxFunction(val declaration: Stmt.Function, val closure: Environment, val isInitializer: Boolean) extends SloxCallable {
+
+  def bind(instance: SloxInstance): SloxFunction = {
+    val environment = new Environment(closure)
+    environment.define("this", instance)
+    new SloxFunction(declaration, environment, isInitializer)
+  }
+
   override def arity(): Int = {
     declaration.params.size()
   }
@@ -14,7 +21,11 @@ class SloxFunction(val declaration: Stmt.Function, val closure: Environment) ext
       interpreter.executeBlock(declaration.body, environment)
     }
     catch {
-      case e: Return => e.value
+      case e: Return => {
+        if (isInitializer) return closure.getAt(0, "this")
+
+        e.value
+      }
     }
   }
 

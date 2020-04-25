@@ -3,9 +3,14 @@ import java.util
 class Resolver(final val interpreter: Interpreter) extends Expr.Visitor[Unit] with Stmt.Visitor[Unit] {
   private final val scopes = new util.Stack[util.Map[String, java.lang.Boolean]]
   private var currentFunction = FunctionType.NONE
+  private var currentClass = ClassType.NONE
 
   object FunctionType extends Enumeration {
-    val NONE, FUNCTION = Value
+    val NONE, FUNCTION, INITIALIZER, METHOD = Value
+  }
+
+  object ClassType extends Enumeration {
+    val NONE, CLASS = Value
   }
 
   override def visitAssignExpr(expr: Expr.Assign): Unit = {
@@ -24,7 +29,9 @@ class Resolver(final val interpreter: Interpreter) extends Expr.Visitor[Unit] wi
     expr.arguments.forEach(resolve(_))
   }
 
-  override def visitGetExpr(expr: Expr.Get): Unit = ???
+  override def visitGetExpr(expr: Expr.Get): Unit = {
+    resolve(expr.`object`)
+  }
 
   override def visitGroupingExpr(expr: Expr.Grouping): Unit = {
     resolve(expr.expression)
@@ -38,11 +45,21 @@ class Resolver(final val interpreter: Interpreter) extends Expr.Visitor[Unit] wi
     resolve(expr.right)
   }
 
-  override def visitSetExpr(expr: Expr.Set): Unit = ???
+  override def visitSetExpr(expr: Expr.Set): Unit = {
+    resolve(expr.value)
+    resolve(expr.`object`)
+  }
 
   override def visitSuperExpr(expr: Expr.Super): Unit = ???
 
-  override def visitThisExpr(expr: Expr.This): Unit = ???
+  override def visitThisExpr(expr: Expr.This): Unit = {
+    if (this.currentClass == ClassType.NONE) {
+      Slox.error(expr.keyword, "Cannot use 'this' outside of a class.")
+    }
+    else {
+      resolveLocal(expr, expr.keyword)
+    }
+  }
 
   override def visitUnaryExpr(expr: Expr.Unary): Unit = {
     resolve(expr.right)
@@ -62,7 +79,28 @@ class Resolver(final val interpreter: Interpreter) extends Expr.Visitor[Unit] wi
     endScope()
   }
 
-  override def visitClassStmt(stmt: Stmt.Class): Unit = ???
+  override def visitClassStmt(stmt: Stmt.Class): Unit = {
+    val enclosingClass = currentClass
+    currentClass = ClassType.CLASS
+
+    declare(stmt.name)
+    define(stmt.name)
+
+    beginScope()
+    scopes.peek().put("this", true)
+
+    stmt.methods.forEach(method => {
+      var declaration = FunctionType.METHOD
+      if (method.name.lexeme.eq("init")) {
+        declaration = FunctionType.INITIALIZER
+      }
+      resolveFunction(method, declaration)
+    })
+
+    endScope()
+
+    currentClass = enclosingClass
+  }
 
   override def visitExpressionStmt(stmt: Stmt.Expression): Unit = {
     resolve(stmt.expression)
@@ -91,6 +129,9 @@ class Resolver(final val interpreter: Interpreter) extends Expr.Visitor[Unit] wi
     }
 
     if (stmt.value != null) {
+      if (currentFunction == FunctionType.INITIALIZER) {
+        Slox.error(stmt.keyword, "Cannot return a value from an initializer.")
+      }
       resolve(stmt.value)
     }
   }

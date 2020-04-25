@@ -107,7 +107,12 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     function.call(this, arguments)
   }
 
-  override def visitGetExpr(expr: Expr.Get): Any = ???
+  override def visitGetExpr(expr: Expr.Get): Any = {
+    val obj = evaluate(expr.`object`)
+    if (obj.isInstanceOf[SloxInstance]) {
+      obj.asInstanceOf[SloxInstance].get(expr.name)
+    }
+  }
 
   override def visitGroupingExpr(expr: Expr.Grouping): Any = {
     evaluate(expr.expression)
@@ -130,11 +135,23 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     evaluate(expr.right)
   }
 
-  override def visitSetExpr(expr: Expr.Set): Any = ???
+  override def visitSetExpr(expr: Expr.Set): Any = {
+    val obj = evaluate(expr.`object`)
+
+    if (! obj.isInstanceOf[SloxInstance]) {
+      throw new RuntimeError(expr.name, "Only instances have fields")
+    }
+
+    val value = evaluate(expr.value)
+    obj.asInstanceOf[SloxInstance].set(expr.name, value)
+    value
+  }
 
   override def visitSuperExpr(expr: Expr.Super): Any = ???
 
-  override def visitThisExpr(expr: Expr.This): Any = ???
+  override def visitThisExpr(expr: Expr.This): Any = {
+    lookUpVariable(expr.keyword, expr)
+  }
 
   override def visitUnaryExpr(expr: Expr.Unary): Any = {
     val right = evaluate(expr.right)
@@ -221,14 +238,23 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     executeBlock(stmt.statements, new Environment(this.environment))
   }
 
-  override def visitClassStmt(stmt: Stmt.Class): Unit = ???
+  override def visitClassStmt(stmt: Stmt.Class): Unit = {
+    this.environment.define(stmt.name.lexeme, null)
+
+    val methods = new mutable.HashMap[String, SloxFunction]()
+    stmt.methods.forEach(method => methods.put(method.name.lexeme,
+      new SloxFunction(method, environment, method.name.lexeme.eq("init"))))
+
+    val klass = new SloxClass(stmt.name.lexeme, methods)
+    environment.assign(stmt.name, klass)
+  }
 
   override def visitExpressionStmt(stmt: Stmt.Expression): Unit = {
     evaluate(stmt.expression)
   }
 
   override def visitFunctionStmt(stmt: Stmt.Function): Unit = {
-    val function = new SloxFunction(stmt, environment)
+    val function = new SloxFunction(stmt, environment, false)
     environment.define(stmt.name.lexeme, function)
   }
 

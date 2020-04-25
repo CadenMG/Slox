@@ -60,7 +60,6 @@ object Slox {
 
     val resolver = new Resolver(interpreter)
     resolver.resolve(statements)
-
     if (hadError) return
 
     this.interpreter.interpret(statements)
