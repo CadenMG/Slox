@@ -30,7 +30,7 @@ object Stmt {
 
   //< stmt-block
   //> stmt-class
-  class Class(val name: Token, val methods: util.ArrayList[Function]) extends Stmt {
+  class Class(val name: Token, val superclass: Expr.Variable, val methods: util.ArrayList[Function]) extends Stmt {
     override def accept[R](visitor: Stmt.Visitor[R]): R = visitor.visitClassStmt(this)
   }
 

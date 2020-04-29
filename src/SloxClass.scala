@@ -1,12 +1,18 @@
 import java.util
 
 import scala.collection.mutable
-class SloxClass(final val name: String, final val methods: mutable.Map[String, SloxFunction]) extends SloxCallable {
+class SloxClass(final val name: String, final val superclass: SloxClass,
+                final val methods: mutable.Map[String, SloxFunction]) extends SloxCallable {
 
   def findMethod(name: String): SloxFunction = {
     if (methods.contains(name)) {
       return methods.get(name).orNull
     }
+
+    if (superclass != null) {
+      return superclass.findMethod(name)
+    }
+
     null
   }
 

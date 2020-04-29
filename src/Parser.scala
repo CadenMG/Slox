@@ -13,7 +13,8 @@ class Parser(tokens: util.List[Token]) {
                  | funDecl
                  | varDecl
                  | statement ;
-  classDecl      → "class" IDENTIFIER "{" function* "}" ;
+  classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER )?
+                   "{" function* "}" ;
   varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
   statement      → exprStmt
                  | forStmt
@@ -47,7 +48,8 @@ class Parser(tokens: util.List[Token]) {
   call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
   arguments      → expression ( "," expression )* ;
   primary        → NUMBER | STRING | "false" | "true" | "nil"
-                 | "(" expression ")" | IDENTIFIER ;
+                 | "(" expression ")" | IDENTIFIER
+                 | "super" "." IDENTIFIER ;
    */
 
   private var current = 0
@@ -76,6 +78,13 @@ class Parser(tokens: util.List[Token]) {
 
   private def classDeclaration(): Stmt = {
     val name = consume(TokenType.IDENTIFIER, "Expect class name.")
+
+    var superclass: Option[Expr.Variable] = None
+    if (`match`(TokenType.LESS)) {
+      consume(TokenType.IDENTIFIER, "Expect superclass name.")
+      superclass = Some(new Expr.Variable(previous()))
+    }
+
     consume(TokenType.LEFT_BRACE, "Expect '{' before class body.")
 
     val methods = new util.ArrayList[Stmt.Function]()
@@ -85,7 +94,7 @@ class Parser(tokens: util.List[Token]) {
 
     consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.")
 
-    new Stmt.Class(name, methods)
+    new Stmt.Class(name, superclass.orNull, methods)
   }
 
   private def function(kind: String): Stmt.Function = {
@@ -391,6 +400,13 @@ class Parser(tokens: util.List[Token]) {
 
     if (`match`(TokenType.NUMBER, TokenType.STRING))
       return new Expr.Literal(previous().literal)
+
+    if (`match`(TokenType.SUPER)) {
+      val keyword = previous()
+      consume(TokenType.DOT, "Expect '.' after 'super'.")
+      val method = consume(TokenType.IDENTIFIER, "Expect superclass method name.")
+      return new Expr.Super(keyword, method)
+    }
 
     if (`match`(TokenType.THIS))
       return new Expr.This(previous())

@@ -10,7 +10,7 @@ class Resolver(final val interpreter: Interpreter) extends Expr.Visitor[Unit] wi
   }
 
   object ClassType extends Enumeration {
-    val NONE, CLASS = Value
+    val NONE, CLASS, SUBCLASS = Value
   }
 
   override def visitAssignExpr(expr: Expr.Assign): Unit = {
@@ -50,7 +50,17 @@ class Resolver(final val interpreter: Interpreter) extends Expr.Visitor[Unit] wi
     resolve(expr.`object`)
   }
 
-  override def visitSuperExpr(expr: Expr.Super): Unit = ???
+  override def visitSuperExpr(expr: Expr.Super): Unit = {
+    if (currentClass == ClassType.NONE) {
+      Slox.error(expr.keyword, "Cannot use 'super' outside of a class.")
+    }
+    else if (currentClass != ClassType.SUBCLASS) {
+      Slox.error(expr.keyword,
+        "Cannot use 'super' in a class with no superclass.")
+    }
+
+    resolveLocal(expr, expr.keyword)
+  }
 
   override def visitThisExpr(expr: Expr.This): Unit = {
     if (this.currentClass == ClassType.NONE) {
@@ -86,6 +96,21 @@ class Resolver(final val interpreter: Interpreter) extends Expr.Visitor[Unit] wi
     declare(stmt.name)
     define(stmt.name)
 
+    if (stmt.superclass != null &&
+        stmt.name.lexeme.equals(stmt.superclass.name.lexeme)) {
+      Slox.error(stmt.superclass.name, "A class cannot inherit from itself.")
+    }
+
+    if (stmt.superclass != null) {
+      currentClass = ClassType.SUBCLASS
+      resolve(stmt.superclass)
+    }
+
+    if (stmt.superclass != null) {
+      beginScope()
+      scopes.peek().put("super", true)
+    }
+
     beginScope()
     scopes.peek().put("this", true)
 
@@ -98,6 +123,8 @@ class Resolver(final val interpreter: Interpreter) extends Expr.Visitor[Unit] wi
     })
 
     endScope()
+
+    if (stmt.superclass != null) endScope()
 
     currentClass = enclosingClass
   }

@@ -147,7 +147,21 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
     value
   }
 
-  override def visitSuperExpr(expr: Expr.Super): Any = ???
+  override def visitSuperExpr(expr: Expr.Super): Any = {
+    val distance = locals.get(expr).get
+    val superclass = environment.getAt(distance, "super").asInstanceOf[SloxClass]
+
+    val `object` = environment.getAt(distance- 1, "this").asInstanceOf[SloxInstance]
+
+    val method = superclass.findMethod(expr.method.lexeme)
+
+    if (method == null) {
+      throw new RuntimeError(expr.method,
+        "Undefined property '" + expr.method.lexeme + "'.")
+    }
+
+    method.bind(`object`)
+  }
 
   override def visitThisExpr(expr: Expr.This): Any = {
     lookUpVariable(expr.keyword, expr)
@@ -239,13 +253,33 @@ class Interpreter extends Expr.Visitor[Any] with Stmt.Visitor[Unit] {
   }
 
   override def visitClassStmt(stmt: Stmt.Class): Unit = {
-    this.environment.define(stmt.name.lexeme, null)
+    var superclass: Option[Any] = None
+    if (stmt.superclass != null) {
+      superclass = Some(evaluate(stmt.superclass))
+      if(!superclass.orNull.isInstanceOf[SloxClass]) {
+        throw new RuntimeError(stmt.superclass.name,
+            "Superclass must be a class.")
+      }
+    }
+
+    environment.define(stmt.name.lexeme, null)
+
+    if (stmt.superclass != null) {
+      environment = new Environment(environment)
+      environment.define("super", superclass.orNull)
+    }
 
     val methods = new mutable.HashMap[String, SloxFunction]()
     stmt.methods.forEach(method => methods.put(method.name.lexeme,
       new SloxFunction(method, environment, method.name.lexeme.eq("init"))))
 
-    val klass = new SloxClass(stmt.name.lexeme, methods)
+    val klass = new SloxClass(stmt.name.lexeme, superclass.orNull.asInstanceOf[SloxClass],
+                              methods)
+
+    if (superclass.nonEmpty) {
+      environment = environment.enclosing
+    }
+
     environment.assign(stmt.name, klass)
   }
 
